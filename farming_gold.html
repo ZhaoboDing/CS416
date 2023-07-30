@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Farming and Gold Accumulation</title>
+	<script src="https://d3js.org/d3.v5.min.js"></script>
+	<script src="https://unpkg.com/d3-svg-annotation@2"></script>
+	<style>
+        /* Add some basic styling for the scatter plot */
+        .dot {
+            stroke: #000;
+        }
+        /* Add some basic styling for the navigation bar */
+        #navbar {
+            background-color: #333;
+            overflow: hidden;
+        }
+
+        #navbar a {
+            float: left;
+            display: block;
+            color: #f2f2f2;
+            text-align: center;
+            padding: 14px 16px;
+            text-decoration: none;
+        }
+
+        #navbar a:hover {
+            background-color: #ddd;
+            color: black;
+        }
+	</style>
+</head>
+<body>
+<h1>Farming and Gold Accumulation</h1>
+<p>This page presents the relationship between early-game gold difference, minion kill difference, and the outcome of the game.</p>
+
+<div id="navbar">
+	<a href="index.html">Home</a>
+	<a href="kill_advantage.html">Kill Advantage</a>
+	<a href="farming_gold.html">Farming and Gold Accumulation</a>
+	<a href="warding_vision.html">Warding and Vision</a>
+</div>
+
+<svg width="960" height="600"></svg>
+
+<script>
+	// Define a variable for your CSV file path
+	var csvFilePath = "data/data.csv"; // replace with actual path
+
+	// Dimensions for the chart
+	var svg = d3.select("svg"),
+		margin = {top: 20, right: 80, bottom: 80, left: 80},
+		width = +svg.attr("width") - margin.left - margin.right,
+		height = +svg.attr("height") - margin.top - margin.bottom;
+
+	var x = d3.scaleLinear().range([0, width]);
+	var y = d3.scaleLinear().range([height, 0]);
+	var color = d3.scaleOrdinal().range(["#d62728", "#1f77b4"]); // blue and red colors for the two teams
+
+	var g = svg.append("g")
+		.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+	// Use D3.js to load the CSV file
+	d3.csv(csvFilePath).then(function(data) {
+		// Convert numeric columns to numbers
+		data.forEach(function(d) {
+			d.blueGoldDiff = +d.blueGoldDiff;
+			d.blueTotalMinionsKilled = +d.blueTotalMinionsKilled;
+			d.redTotalMinionsKilled = +d.redTotalMinionsKilled;
+			d.blueWins = +d.blueWins;
+		});
+
+		// Calculate minion kill difference
+		data.forEach(function(d) {
+			d.minionKillDifference = d.blueTotalMinionsKilled - d.redTotalMinionsKilled;
+		});
+
+		// Set the domains of the scales
+		x.domain(d3.extent(data, function(d) { return d.blueGoldDiff; }));
+		y.domain(d3.extent(data, function(d) { return d.minionKillDifference; }));
+		color.domain([0, 1]); // blueWins is either 0 or 1
+
+		// Add the dots
+		g.selectAll(".dot")
+			.data(data)
+			.enter().append("circle") // append circles
+			.attr("class", "dot")
+			.attr("cx", function(d) { return x(d.blueGoldDiff); })
+			.attr("cy", function(d) { return y(d.minionKillDifference); })
+			.attr("r", 3.5) // radius of circles
+			.style("fill", function(d) { return color(d.blueWins); }); // color circles by the winner of the game
+
+		// Add the x-axis
+		g.append("g")
+			.attr("transform", "translate(0," + height + ")")
+			.call(d3.axisBottom(x))
+			.append("text") // Add a text element for the x-axis label
+			.attr("fill", "#000") // Set the color of the text
+			.attr("x", width/2) // Position at the middle of the axis
+			.attr("y", 50) // Position 50px below the axis
+			.attr("text-anchor", "middle") // Align the text in the middle
+			.text("Gold Difference");
+
+		// Add the y-axis
+		g.append("g")
+			.call(d3.axisLeft(y))
+			.append("text") // Add a text element for the y-axis label
+			.attr("fill", "#000") // Set the color of the text
+			.attr("transform", "rotate(-90)") // Rotate the text
+			.attr("x", -height/2) // Position at the middle of the axis
+			.attr("y", -60) // Position 60px to the left of the axis
+			.attr("text-anchor", "middle") // Align the text in the middle
+			.text("Minion Kill Difference");
+
+		// Create a legend for the color scale
+		var legend = svg.selectAll(".legend")
+			.data(color.domain())
+			.enter().append("g")
+			.attr("class", "legend")
+			.attr("transform", function(d, i) { return "translate(0," + (400 +  i * 20) + ")"; });
+
+		// Add colored rectangles to the legend
+		legend.append("rect")
+			.attr("x", width - 18)
+			.attr("width", 18)
+			.attr("height", 18)
+			.style("fill", color);
+
+		// Add labels to the legend
+		legend.append("text")
+			.attr("x", width - 24)
+			.attr("y", 9)
+			.attr("dy", ".35em")
+			.style("text-anchor", "end")
+			.text(function(d) { return d ? "Win" : "Lose"; });
+	});
+</script>
+</body>
+</html>

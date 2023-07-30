@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Kill Advantage</title>
+	<script src="https://d3js.org/d3.v5.min.js"></script>
+	<script src="https://unpkg.com/d3-svg-annotation@2"></script>
+	<style>
+        /* Add some basic styling for the line chart */
+        .line {
+            fill: none;
+            stroke: steelblue;
+            stroke-width: 2px;
+        }
+        /* Add some basic styling for the navigation bar */
+        #navbar {
+            background-color: #333;
+            overflow: hidden;
+        }
+
+        #navbar a {
+            float: left;
+            display: block;
+            color: #f2f2f2;
+            text-align: center;
+            padding: 14px 16px;
+            text-decoration: none;
+        }
+
+        #navbar a:hover {
+            background-color: #ddd;
+            color: black;
+        }
+	</style>
+</head>
+<body>
+<h1>Kill Advantage</h1>
+<p>This page presents the relationship between early-game kill difference and the probability of winning.</p>
+
+<div id="navbar">
+	<a href="index.html">Home</a>
+	<a href="kill_advantage.html">Kill Advantage</a>
+	<a href="farming_gold.html">Farming and Gold Accumulation</a>
+	<a href="warding_vision.html">Warding and Vision</a>
+</div>
+
+<svg width="900" height="600"></svg>
+
+<script>
+	// Define a variable for your CSV file path
+	var csvFilePath = "data/data.csv"; // replace with actual path
+
+	// Dimensions for the chart
+	var svg = d3.select("svg"),
+		margin = {top: 60, right: 120, bottom: 90, left: 120},
+		width = +svg.attr("width") - margin.left - margin.right,
+		height = +svg.attr("height") - margin.top - margin.bottom;
+
+	var x = d3.scaleLinear().range([0, width]);
+	var y = d3.scaleLinear().range([height, 0]);
+
+	var line = d3.line()
+		.x(function(d) { return x(+d.key); }) // convert key to number
+		.y(function(d) { return y(d.winRate); }); // Use calculated winRate as y-value
+
+	var g = svg.append("g")
+		.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+	// Use D3.js to load the CSV file
+	d3.csv(csvFilePath).then(function(data) {
+		// Convert numeric columns to numbers and filter out rows with NaN values
+		data = data.filter(function(d) {
+			d.blueKills = +d.blueKills;
+			d.redKills = +d.redKills;
+			d.blueWins = +d.blueWins;
+			d.killDifference = d.blueKills - d.redKills;
+			return !isNaN(d.killDifference) && !isNaN(d.blueWins);
+		});
+
+		// Group games by kill difference
+		var gamesByKillDifference = d3.nest()
+			.key(function(d) { return d.killDifference; })
+			.entries(data);
+
+		// Calculate win rate for each kill difference
+		gamesByKillDifference.forEach(function(d) {
+			var totalGames = d.values.length;
+			var blueWins = d3.sum(d.values, function(g) { return g.blueWins; });
+			d.winRate = blueWins / totalGames;
+		});
+
+		// Filter and sort the data
+		var minGames = 10; // Only consider kill differences for which there are at least 10 games
+		gamesByKillDifference = gamesByKillDifference
+			.filter(function(d) { return d.values.length >= minGames; })
+			.sort(function(a, b) { return d3.ascending(+a.key, +b.key); }); // convert keys to numbers for correct sorting
+
+		// Set the domains of the scales
+		x.domain(d3.extent(gamesByKillDifference, function(d) { return +d.key; })); // convert key to number
+		y.domain([0, 1]); // Assuming win rate is a proportion between 0 and 1
+
+		// Add the line
+		g.append("path")
+			.datum(gamesByKillDifference)
+			.attr("class", "line")
+			.attr("d", line);
+
+		// Add the x-axis
+		g.append("g")
+			.attr("transform", "translate(0," + height + ")")
+			.call(d3.axisBottom(x));
+
+		// Add the y-axis
+		g.append("g")
+			.call(d3.axisLeft(y));
+
+		// Add the x-axis
+		g.append("g")
+			.attr("transform", "translate(0," + height + ")")
+			.call(d3.axisBottom(x))
+			.append("text") // Add a text element for the x-axis label
+			.attr("fill", "#000") // Set the color of the text
+			.attr("x", width/2) // Position at the middle of the axis
+			.attr("y", 30) // Position 30px below the axis
+			.attr("text-anchor", "middle") // Align the text in the middle
+			.text("Kill Difference");
+
+		// Add the y-axis
+		g.append("g")
+			.call(d3.axisLeft(y))
+			.append("text") // Add a text element for the y-axis label
+			.attr("fill", "#000") // Set the color of the text
+			.attr("transform", "rotate(-90)") // Rotate the text
+			.attr("x", -height/2) // Position at the middle of the axis
+			.attr("y", -30) // Position 30px to the left of the axis
+			.attr("text-anchor", "middle") // Align the text in the middle
+			.text("Win Rate");
+
+		var annotations = gamesByKillDifference.map(function(d) {
+			return {
+				note: {
+					title: "Kill difference: " + d.key,
+					label: "Win rate: " + d.winRate.toFixed(2)
+				},
+				x: x(+d.key),
+				y: y(d.winRate),
+				dx: 0,
+				dy: 0
+			};
+		});
+
+		var makeAnnotations = d3.annotation()
+			.annotations(annotations);
+
+		g.append("g")
+			.attr("class", "annotation-group")
+			.call(makeAnnotations)
+			.selectAll(".annotation.callout")
+			.style("display", "none");
+
+		// Add points to the line chart
+		g.selectAll(".dot")
+			.data(gamesByKillDifference)
+			.enter().append("circle") // append circles to the line chart
+			.attr("class", "dot")
+			.attr("cx", function(d) { return x(+d.key); })
+			.attr("cy", function(d) { return y(d.winRate); })
+			.attr("r", 5) // radius of circles
+			.on("mouseover", function(d, i) { // display annotation on mouseover
+				d3.select(this).attr("r", 10); // increase radius of circle
+				g.select(".annotation-group")
+					.selectAll(".annotation.callout")
+					.filter(function(a, j) { return i === j; })
+					.style("display", null);
+			})
+			.on("mouseout", function(d, i) { // hide annotation on mouseout
+				d3.select(this).attr("r", 5); // reset radius of circle
+				g.select(".annotation-group")
+					.selectAll(".annotation.callout")
+					.filter(function(a, j) { return i === j; })
+					.style("display", "none");
+			});
+
+	}).catch(function(error) {
+		// Handle any errors during the loading of the file
+		console.log(error);
+	});
+</script>
+
+</body>
+</html>
